@@ -1,0 +1,17 @@
+# Atualização do Threat Model (Dia 01 -> Dia 03) — Módulos BoxGPT e SSO
+
+| ID Ameaça | Componente / Fluxo | Ameaça Identificada | Categoria STRIDE / OWASP | Severidade (OWASP Risk Rating) | Achados Relacionados (Dia 03) | Controle / Mitigação Exigida |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **TM-34** | BoxGPT (`/assistente/api/mensagem` + Extrato Pix) | Injeção direta e indireta de prompt subvertendo instruções e ativando backdoor de manutenção (`modo engenheiro boxcore`) | Tampering / Elevation of Privilege (OWASP LLM01) | **Crítico (9.1)** | AI-01, AI-04, AI-05, AI-12 | Delimitação estrutural de dados externos, remoção de frases-chave privilegiadas e isolamento de system prompt |
+| **TM-35** | BoxGPT (Contexto System Prompt e Few-Shot) | Vazamento de instruções internas, credenciais hardcoded de banco/LLM e PII de clientes nos exemplos de treino | Information Disclosure (OWASP LLM02 / LLM07) | **Crítico (9.0)** | AI-02, AI-03, AI-06 | Remoção de segredos do prompt para Vault, rotação imediata de credenciais, dados sintéticos no few-shot e output guardrail |
+| **TM-36** | BoxGPT (Ferramentas `consultar_cliente` e `fazer_pix`) | Excessive Agency / Confused Deputy permitindo consultar saldo e `senha_hash` de terceiros e executar Pix sem confirmação | Elevation of Privilege / Information Disclosure (OWASP LLM06) | **Crítico (8.6)** | AI-07, AI-08, AI-09 | Vincular consultas estritamente ao `sub`/`cpf` autenticado, filtrar colunas sensíveis via DTO e exigir MFA/PIN transacional no Pix |
+| **TM-37** | SSO (`/sso/callback` e Tokens JWT) | Aceitação de `id_token` sem assinatura (`alg: none`), com assinatura inválida ou HS256 sem `kid` permitindo Account Takeover | Spoofing (OWASP API2:2023) | **Crítico (9.4)** | SSO-01, SSO-03, SSO-11 | Rejeitar `alg: none`, validar assinatura assimétrica (`RS256`/`ES256`) via JWKS do IdP e remover PII em claro do payload |
+| **TM-38** | SSO (`/sso/login` e `/sso/callback`) | Ausência de validação de claims (`exp`, `iss`, `aud`, `nonce`, `state`), fluxo implícito, ausência de PKCE, escopos excessivos e token em URL HTTP | Spoofing / Tampering / Information Disclosure (OAuth 2.1) | **Alto (8.2)** | SSO-02, SSO-04, SSO-05, SSO-06, SSO-07, SSO-08, SSO-09, SSO-10 | Migrar para Authorization Code + PKCE (S256) sobre HTTPS, validar `exp`/`iss`/`aud`/`nonce`/`state` e restringir escopos |
+| **TM-39** | BoxGPT e SSO (Observabilidade / Auditoria) | Ausência de rate limiting e logs estruturados de segurança para tentativas de prompt injection e tokens inválidos | Repudiation / Denial of Service (OWASP LLM10) | **Médio (6.5)** | AI-13 | Implementar rate limiting por usuário/IP e telemetria estruturada de eventos de segurança integrada ao SIEM |
+
+## Novo Top 5 Riscos Consolidado (Pós-Dia 03)
+1. **TM-37 (Crítico - 9.4):** Account Takeover no SSO por ausência de verificação de assinatura JWT (`alg: none` / assinatura inválida).
+2. **TM-34 (Crítico - 9.1):** Sequestro de sessão do BoxGPT por Injeção Indireta de Prompt via descrição de transferência Pix e backdoor hardcoded.
+3. **TM-35 (Crítico - 9.0):** Exposição de credenciais de produção (`PostgreSQL` e chave de API LLM) e PII de clientes no contexto do BoxGPT.
+4. **TM-36 (Crítico - 8.6):** Quebra de sigilo bancário e vazamento de `senha_hash` de terceiros por Excessive Agency nas ferramentas do assistente.
+5. **TM-38 (Alto - 8.2):** Replay de tokens expirados, Login CSRF e exposição de tokens na URL no fluxo OIDC/OAuth.
